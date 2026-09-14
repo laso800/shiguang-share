@@ -1,0 +1,317 @@
+/* ============================================================
+   拾光 · 日常分享社区 —— 全局样式表
+   风格：清新简约 + 温暖治愈
+   （奶油色背景 + 珊瑚橙主色 + 薄荷青辅色，圆角卡片，柔和阴影）
+   ============================================================ */
+
+/* ---------- 配色变量：想换整体色调，改这里就行 ---------- */
+:root {
+  --bg: #FAF6F0;            /* 页面奶油底色 */
+  --card: #FFFFFF;          /* 卡片白色 */
+  --ink: #3E3730;           /* 主文字：暖灰色 */
+  --muted: #9A8F84;         /* 次要文字 */
+  --primary: #F0815C;       /* 主色：珊瑚橙（按钮、强调） */
+  --primary-soft: #FDE9E1;  /* 主色的浅色背景 */
+  --accent: #35BFA6;        /* 辅色：薄荷青（小点缀） */
+  --line: #EFE6DC;          /* 边框 / 分割线 */
+  --shadow: 0 6px 24px rgba(190, 150, 120, 0.12); /* 柔和阴影 */
+  --radius: 16px;           /* 卡片圆角 */
+}
+
+/* ---------- 基础重置 ---------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+a { color: var(--primary); text-decoration: none; }
+
+/* ============================================================
+   背景互动元素：浮动气泡 + 跟随鼠标的光斑
+   （全部由 js/app.js 的 initFx() 动态生成）
+   ============================================================ */
+.bubble {
+  position: fixed;          /* 固定在屏幕，不随滚动移动 */
+  bottom: -80px;            /* 从屏幕下方冒出来 */
+  border-radius: 50%;
+  opacity: 0.35;
+  pointer-events: none;     /* 重要：不阻挡鼠标点击 */
+  animation: floatUp linear infinite; /* 每个泡泡的时长/大小由 JS 随机 */
+  z-index: 0;
+}
+
+@keyframes floatUp {
+  from { transform: translateY(0) rotate(0deg); }
+  to   { transform: translateY(-115vh) rotate(360deg); } /* 飘到屏幕外 */
+}
+
+/* 跟随鼠标的光斑 */
+#glow {
+  position: fixed;
+  width: 280px; height: 280px;
+  top: 0; left: 0;
+  background: radial-gradient(circle, rgba(240, 129, 92, 0.15), transparent 65%);
+  border-radius: 50%;
+  pointer-events: none;     /* 光斑不挡点击 */
+  z-index: 0;
+  transform: translate(-50%, -50%);
+}
+
+/* 用户开启"减少动态效果"时，自动关掉飘动动画（无障碍小细节） */
+@media (prefers-reduced-motion: reduce) {
+  .bubble { animation: none; }
+  #glow { display: none; }
+}
+
+/* ============================================================
+   顶部导航栏
+   ============================================================ */
+.navbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px;
+  background: rgba(250, 246, 240, 0.88);
+  backdrop-filter: blur(10px);   /* 毛玻璃效果 */
+  border-bottom: 1px solid var(--line);
+}
+
+.logo {
+  font-size: 22px; font-weight: 700;
+  color: var(--primary);
+}
+
+.nav-right { display: flex; gap: 10px; align-items: center; }
+
+/* ============================================================
+   按钮
+   ============================================================ */
+.btn {
+  display: inline-block;
+  padding: 9px 18px;
+  border: none; border-radius: 999px;  /* 胶囊形按钮 */
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.btn:active { transform: translateY(0); }
+
+/* ============================================================
+   页面主体容器 + 卡片
+   ============================================================ */
+.container {
+  max-width: 640px;            /* 帖子区域居中，宽度适中 */
+  margin: 24px auto;
+  padding: 0 16px;
+  position: relative;
+  z-index: 1;                  /* 盖在气泡上面 */
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  font-size: 26px; font-weight: 700;
+  margin: 8px 0 20px;
+  text-align: center;
+}
+
+.muted { color: var(--muted); font-size: 13px; }
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px 0;
+  font-size: 14px;
+}
+
+/* ============================================================
+   帖子卡片（首页 / 个人主页共用，HTML 由 app.js 生成）
+   ============================================================ */
+.post-card {
+  transition: box-shadow 0.2s;
+  cursor: pointer;
+}
+.post-card:hover { box-shadow: 0 10px 30px rgba(190, 150, 120, 0.2); }
+
+.post-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+
+/* 头像：圆形 + 取名字第一个字，背景色由名字自动生成 */
+.avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 16px;
+  flex-shrink: 0;
+}
+.avatar.large { width: 72px; height: 72px; font-size: 30px; }
+
+.post-user { font-weight: 600; font-size: 15px; }
+.post-title { font-weight: 600; font-size: 15px; }
+.post-time { font-size: 12px; color: var(--muted); }
+
+/* 正文：保留换行（white-space: pre-wrap） */
+.post-content {
+  line-height: 1.7;
+  font-size: 15px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 底部操作行：点赞 / 评论 / 收藏 */
+.post-actions {
+  display: flex; gap: 20px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* 操作按钮本身是 <button>，放在 .post-card 里点击时不触发卡片跳转 */
+.action-btn {
+  background: none; border: none;
+  font-size: 14px; color: var(--muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.action-btn.active { color: var(--primary); font-weight: 600; }
+.action-btn:hover { color: var(--primary); }
+
+/* ============================================================
+   首页筛选栏（二期会扩展：热度 / 点赞 / 关键词搜索）
+   ============================================================ */
+.filter-bar {
+  display: flex; gap: 8px; align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chip.active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.search-input {
+  flex: 1; min-width: 160px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 13px;
+  outline: none;
+}
+.search-input:focus { border-color: var(--primary); }
+
+/* ============================================================
+   表单（登录 / 注册 / 发布 / 编辑资料）
+   ============================================================ */
+.form-card {
+  max-width: 400px;
+  margin: 60px auto;
+  padding: 28px;
+}
+
+/* 登录页的"登录 / 注册"切换标签 */
+.tabs { display: flex; gap: 24px; margin-bottom: 20px; }
+.tab {
+  background: none; border: none;
+  font-size: 16px; color: var(--muted);
+  cursor: pointer;
+  padding-bottom: 6px;
+}
+.tab.active {
+  color: var(--primary);
+  font-weight: 700;
+  border-bottom: 2px solid var(--primary);
+}
+
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+
+input[type="text"], input[type="email"], input[type="password"], textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+input:focus, textarea:focus { border-color: var(--primary); }
+
+textarea { resize: vertical; min-height: 120px; }
+
+.form-hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 14px; }
+
+/* ============================================================
+   评论区（帖子详情页）
+   ============================================================ */
+.comment-item {
+  display: flex; gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.comment-body { flex: 1; }
+.comment-user { font-weight: 600; font-size: 14px; }
+.comment-content { font-size: 14px; line-height: 1.6; margin-top: 2px; white-space: pre-wrap; }
+.comment-foot { margin-top: 6px; display: flex; gap: 16px; align-items: center; }
+
+.comment-input-row {
+  display: flex; gap: 10px;
+  margin-top: 16px;
+}
+.comment-input-row input {
+  flex: 1;
+}
+
+/* ============================================================
+   底部提示漂浮条（toast）
+   ============================================================ */
+#toast {
+  position: fixed;
+  top: 20px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  z-index: 99;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+#toast.show { opacity: 0.92; }
