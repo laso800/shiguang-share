@@ -27,8 +27,19 @@
           <span id="charCount">0</span> / 500
         </div>
       </div>
-      <!-- 二期：这里会加上传图片按钮 -->
-      <p class="muted" style="margin-bottom:14px">图片上传将在二期开放，先发文字动态吧</p>
+      <!-- 图片上传（二期）：选图 → 浏览器本地压缩 → 上传 Supabase 图片桶 -->
+      <div class="field">
+        <label>图片（选一张，发布前自动压缩）</label>
+        <input type="file" id="photoInput" accept="image/*" style="display:none">
+        <div class="img-picker">
+          <button type="button" class="btn btn-ghost" id="pickPhotoBtn">选择图片</button>
+          <button type="button" class="btn btn-ghost" id="removePhotoBtn" style="display:none">移除图片</button>
+        </div>
+        <div class="img-preview-wrap" id="imgPreviewWrap" style="display:none">
+          <img class="post-img" id="imgPreview" alt="图片预览">
+        </div>
+        <p class="muted" style="margin-top:8px">图片会先压缩到长边 1280 像素再上传，省流量、省免费空间（1GB）</p>
+      </div>
       <button class="btn btn-primary" id="publishBtn" style="width:100%">发 布</button>
     </div>
   </main>
@@ -46,23 +57,61 @@
       document.getElementById("charCount").textContent = e.target.value.length;
     });
 
-    /* 点击发布：向 posts 表插入一行数据（try/catch 兜底报错） */
+    /* ---------- 图片选择与预览 ---------- */
+    let chosenImage = null;    // 选中的原始图片文件
+    let previewUrl = null;     // 预览用的临时地址
+    document.getElementById("pickPhotoBtn").onclick = () => document.getElementById("photoInput").click();
+    document.getElementById("photoInput").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      chosenImage = file;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);   // 释放上一次的预览地址
+      previewUrl = URL.createObjectURL(file);            // 生成本地临时预览地址
+      document.getElementById("imgPreview").src = previewUrl;
+      document.getElementById("imgPreviewWrap").style.display = "";
+      document.getElementById("removePhotoBtn").style.display = "";
+    });
+    document.getElementById("removePhotoBtn").onclick = () => {
+      chosenImage = null;
+      document.getElementById("photoInput").value = "";
+      document.getElementById("imgPreviewWrap").style.display = "none";
+      document.getElementById("removePhotoBtn").style.display = "none";
+    };
+
+    /* ---------- 发布：有图先传图，再插帖子 ---------- */
     document.getElementById("publishBtn").onclick = async () => {
+      const btn = document.getElementById("publishBtn");
       try {
         const content = document.getElementById("postContent").value.trim();
         if (!content) { App.showToast("内容不能为空哦"); return; }
 
+        btn.disabled = true; btn.textContent = "发布中…";
         const me = await App.getUser();
-        // F12 网络面板里能看到这条 insert 请求 —— 录视频时可以展示
+
+        // 第 1 步：有图 → 压缩 → 上传到 images 桶（每个用户一个文件夹）
+        let imageUrl = null;
+        if (chosenImage) {
+          const blob = await App.compressImage(chosenImage, 1280, 0.85);
+          const path = me.id + "/" + Date.now() + ".jpg";
+          const { error: upErr } = await App.db.storage
+            .from("images")
+            .upload(path, blob, { contentType: "image/jpeg" });
+          if (upErr) throw upErr;
+          // 拿到这张图片的公开网址，一会儿存进 posts 表
+          imageUrl = App.db.storage.from("images").getPublicUrl(path).data.publicUrl;
+        }
+
+        // 第 2 步：把帖子（含图片地址）插入 posts 表
         const { error } = await App.db
           .from("posts")
-          .insert({ user_id: me.id, content });
+          .insert({ user_id: me.id, content, image_url: imageUrl });
 
         if (error) throw error;
         App.showToast("发布成功！");
         setTimeout(() => (location.href = "index.html"), 600);
       } catch (err) {
         console.error(err);
+        btn.disabled = false; btn.textContent = "发 布";
         App.showToast("发布失败：" + (err.message || err));
       }
     };
