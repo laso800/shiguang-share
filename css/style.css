@@ -361,3 +361,8 @@ textarea { resize: vertical; min-height: 120px; }
   gap: 8px;
   margin-left: auto;
 }
+
+/* 发布页：选图按钮与预览 */
+.img-picker { display: flex; gap: 8px; }
+.img-preview-wrap { margin-top: 12px; }
+.img-preview-wrap .post-img { margin-top: 0; }
