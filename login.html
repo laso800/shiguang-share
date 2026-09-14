@@ -23,8 +23,8 @@
     <!-- 登录表单 -->
     <form id="loginForm" onsubmit="return false">
       <div class="field">
-        <label>邮箱</label>
-        <input type="email" id="loginEmail" placeholder="you@example.com" required>
+        <label>用户名 / 邮箱</label>
+        <input type="text" id="loginId" placeholder="用户名 或 邮箱" required>
       </div>
       <div class="field">
         <label>密码</label>
@@ -36,14 +36,15 @@
     <!-- 注册表单（默认隐藏） -->
     <form id="regForm" style="display:none" onsubmit="return false">
       <div class="field">
-        <label>邮箱</label>
-        <input type="email" id="regEmail" placeholder="you@example.com" required>
+        <label>用户名（注册后即是你的昵称）</label>
+        <input type="text" id="regUsername" placeholder="4-20位字母、数字或下划线" minlength="4" maxlength="20" required>
       </div>
       <div class="field">
         <label>密码</label>
         <input type="password" id="regPwd" placeholder="至少 6 位" minlength="6" required>
       </div>
       <button type="submit" class="btn btn-primary" style="width:100%">注 册</button>
+      <p class="muted" style="margin-top:10px;text-align:center">无需真实邮箱；请牢记密码（虚拟账号无法找回密码）</p>
     </form>
 
     <p class="form-hint"><a href="index.html">← 先随便逛逛（不登录也能看帖子）</a></p>
@@ -67,13 +68,22 @@
       document.getElementById("tabReg").classList.toggle("active", !isLogin);
     }
 
+    /* 用户名转虚拟邮箱：注册/登录都统一转成 email 再交给 Supabase。
+   例：用户输 "xiaoming" → 实际账号是 xiaoming@shiguang.user
+   登录时如果输入的是真邮箱（含 @）则原样使用，兼容老账号 */
+    const FAKE_DOMAIN = "@shiguang.user";
+    function toEmail(input) {
+      const v = input.trim();
+      return v.includes("@") ? v : v.toLowerCase() + FAKE_DOMAIN;
+    }
+
     /* 登录：用邮箱 + 密码换取登录会话
        try/catch 兜底：无论什么错（网络不通/被拦截/密钥错误）都会弹出原因 */
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();   // 阻止表单默认刷新页面
       try {
         const { error } = await App.db.auth.signInWithPassword({
-          email: document.getElementById("loginEmail").value.trim(),
+          email: toEmail(document.getElementById("loginId").value),
           password: document.getElementById("loginPwd").value,
         });
         if (error) throw error;
@@ -85,17 +95,27 @@
       }
     });
 
-    /* 注册：创建新账号，成功后自动登录并跳回首页 */
+    /* 注册：用户名 + 密码即完成注册，昵称直接取用户名 */
     document.getElementById("regForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       try {
+        const username = document.getElementById("regUsername").value.trim();
+        // 校验：4-20 位字母、数字或下划线
+        if (!/^[A-Za-z0-9_]{4,20}$/.test(username)) {
+          tip("用户名需为 4-20 位字母、数字或下划线");
+          return;
+        }
         const { data, error } = await App.db.auth.signUp({
-          email: document.getElementById("regEmail").value.trim(),
+          email: username.toLowerCase() + FAKE_DOMAIN,   // 虚拟邮箱
           password: document.getElementById("regPwd").value,
         });
         if (error) throw error;
         // 如果管理员在 Supabase 里关掉了"邮箱确认"，data.session 会直接存在
         if (data.session) {
+          // 数据库触发器默认给昵称"用户_xxxxxx"，这里立刻覆盖成注册的用户名
+          try {
+            await App.db.from("profiles").update({ username }).eq("id", data.user.id);
+          } catch (updErr) { console.error(updErr); }
           tip("注册成功，欢迎加入拾光！");
           setTimeout(() => (location.href = "index.html"), 600);
         } else {
