@@ -46,20 +46,25 @@
       document.getElementById("charCount").textContent = e.target.value.length;
     });
 
-    /* 点击发布：向 posts 表插入一行数据 */
+    /* 点击发布：向 posts 表插入一行数据（try/catch 兜底报错） */
     document.getElementById("publishBtn").onclick = async () => {
-      const content = document.getElementById("postContent").value.trim();
-      if (!content) { App.showToast("内容不能为空哦"); return; }
+      try {
+        const content = document.getElementById("postContent").value.trim();
+        if (!content) { App.showToast("内容不能为空哦"); return; }
 
-      const me = await App.getUser();
-      // F12 网络面板里能看到这条 insert 请求 —— 录视频时可以展示
-      const { error } = await App.supabase
-        .from("posts")
-        .insert({ user_id: me.id, content });
+        const me = await App.getUser();
+        // F12 网络面板里能看到这条 insert 请求 —— 录视频时可以展示
+        const { error } = await App.supabase
+          .from("posts")
+          .insert({ user_id: me.id, content });
 
-      if (error) { App.showToast("发布失败：" + error.message); return; }
-      App.showToast("发布成功！");
-      setTimeout(() => (location.href = "index.html"), 600);
+        if (error) throw error;
+        App.showToast("发布成功！");
+        setTimeout(() => (location.href = "index.html"), 600);
+      } catch (err) {
+        console.error(err);
+        App.showToast("发布失败：" + (err.message || err));
+      }
     };
   </script>
 </body>
