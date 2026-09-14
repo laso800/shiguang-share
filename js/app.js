@@ -67,6 +67,30 @@ function timeAgo(t) {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
+/* 图片压缩：把用户选的图片按最长边缩到 maxSide 像素，再转成 jpg。
+   好处：上传快、省免费存储（1GB 额度）、别人打开帖子加载也快。 */
+function compressImage(file, maxSide = 1280, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");   // 用 canvas 重新绘制 = 压缩
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(img.src);   // 释放内存里的临时地址
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("图片压缩失败"))),
+        "image/jpeg", quality
+      );
+    };
+    img.onerror = () => reject(new Error("图片读取失败"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 /* 生成头像：取名字第一个字 + 自动配色（用名字哈希选颜色） */
 const AVATAR_COLORS = ["#F0815C", "#35BFA6", "#6C8CE0", "#E0A245", "#B07CD6", "#5DB56C"];
 function avatarHtml(name, large = false) {
@@ -288,7 +312,7 @@ async function toggleCommentLike(commentId) {
 const App = {
   db,
   state: { likedSet: new Set(), favSet: new Set(), commentLikedSet: new Set() },
-  getUser, requireLogin, esc, timeAgo, avatarHtml, showToast, logout,
+  getUser, requireLogin, esc, timeAgo, avatarHtml, showToast, logout, compressImage,
   initFx, fetchPostList, renderPostCard,
   toggleLike, toggleFav, toggleCommentLike,
 };
