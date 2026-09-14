@@ -2,7 +2,7 @@
    拾光 · 公共脚本
    作用：1) 连接 Supabase  2) 公共工具函数  3) 背景特效
    每个页面都按顺序引入：
-     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+     <script src="js/supabase.js"></script>   ← 本地 Supabase 库（免国外CDN，防网络卡顿）
      <script src="js/app.js"></script>
    ============================================================ */
 
@@ -11,6 +11,17 @@
    数据安全靠 SQL 里的"行级安全策略(RLS)"保证，而不是靠藏钥匙。 */
 const SUPABASE_URL = "https://xukjypmmygivdutxfnoj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_8Url38cK_AukZjwVf49-cw_PnmC7NWb";
+
+/* 保险：如果 Supabase 库文件没加载成功（网络波动），
+   在页面顶部显示红色提示条，而不是让页面"点了没反应"。 */
+if (!window.supabase) {
+  addEventListener("DOMContentLoaded", () => {
+    const tip = document.createElement("div");
+    tip.style.cssText = "position:fixed;top:0;left:0;right:0;background:#E8463A;color:#fff;text-align:center;padding:10px;z-index:999";
+    tip.textContent = "网络组件加载失败：请按 Ctrl+F5 强制刷新页面重试";
+    document.body.appendChild(tip);
+  });
+}
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
