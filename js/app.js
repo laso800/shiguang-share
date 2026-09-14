@@ -23,11 +23,15 @@ if (!window.supabase) {
   });
 }
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+/* 注意：这个变量不能取名叫 supabase！
+   官方库（js/supabase.js）已经声明了全局变量 var supabase，
+   浏览器里再写 const supabase 会报"已被声明"的语法错误，
+   导致整个脚本失效（就是之前"点了没反应"的根源）。 */
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* ---------- 2. 当前登录用户 ---------- */
 async function getUser() {
-  const { data } = await supabase.auth.getUser();
+  const { data } = await db.auth.getUser();
   return data.user || null;   // 未登录返回 null
 }
 
@@ -85,7 +89,7 @@ function showToast(msg) {
 
 /* 退出登录 */
 async function logout() {
-  await supabase.auth.signOut();
+  await db.auth.signOut();
   location.href = "index.html";
 }
 
@@ -128,7 +132,7 @@ function initFx() {
    第 2 步统计每篇帖子的点赞数、评论数
    第 3 步查出"我"点过赞 / 收藏过哪些（用于按钮高亮） */
 async function fetchPostList({ userId = null, limit = 50 } = {}) {
-  let q = supabase
+  let q = db
     .from("posts")
     .select("id, content, created_at, user_id, profiles(username)");
   if (userId) q = q.eq("user_id", userId);         // 只看某人的帖子（个人主页用）
@@ -140,12 +144,12 @@ async function fetchPostList({ userId = null, limit = 50 } = {}) {
   const ids = posts.map((p) => p.id);
 
   // 统计点赞数：一次查回所有相关行，在 JS 里数
-  const { data: likes } = await supabase.from("post_likes").select("post_id").in("post_id", ids);
+  const { data: likes } = await db.from("post_likes").select("post_id").in("post_id", ids);
   const likeCount = {};
   (likes || []).forEach((r) => (likeCount[r.post_id] = (likeCount[r.post_id] || 0) + 1));
 
   // 统计评论数
-  const { data: comments } = await supabase.from("comments").select("post_id").in("post_id", ids);
+  const { data: comments } = await db.from("comments").select("post_id").in("post_id", ids);
   const commentCount = {};
   (comments || []).forEach((r) => (commentCount[r.post_id] = (commentCount[r.post_id] || 0) + 1));
 
@@ -154,9 +158,9 @@ async function fetchPostList({ userId = null, limit = 50 } = {}) {
   const likedSet = new Set();
   const favSet = new Set();
   if (me) {
-    const { data: myLikes } = await supabase.from("post_likes").select("post_id").eq("user_id", me.id).in("post_id", ids);
+    const { data: myLikes } = await db.from("post_likes").select("post_id").eq("user_id", me.id).in("post_id", ids);
     (myLikes || []).forEach((r) => likedSet.add(String(r.post_id)));
-    const { data: myFavs } = await supabase.from("favorites").select("post_id").eq("user_id", me.id).in("post_id", ids);
+    const { data: myFavs } = await db.from("favorites").select("post_id").eq("user_id", me.id).in("post_id", ids);
     (myFavs || []).forEach((r) => favSet.add(String(r.post_id)));
   }
 
@@ -207,11 +211,11 @@ async function toggleLike(postId) {
 
   if (App.state.likedSet.has(key)) {
     // 已赞过 → 删掉这条点赞记录（取消点赞）
-    await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", me.id);
+    await db.from("post_likes").delete().eq("post_id", postId).eq("user_id", me.id);
     App.state.likedSet.delete(key);
   } else {
     // 没赞过 → 插入一条点赞记录
-    await supabase.from("post_likes").insert({ post_id: postId, user_id: me.id });
+    await db.from("post_likes").insert({ post_id: postId, user_id: me.id });
     App.state.likedSet.add(key);
   }
   await refreshLikeUI(postId);
@@ -222,7 +226,7 @@ async function refreshLikeUI(postId) {
   const countEl = document.getElementById("likeCount-" + postId);
   const btnEl = document.getElementById("likeBtn-" + postId);
   if (!countEl || !btnEl) return;
-  const { count } = await supabase
+  const { count } = await db
     .from("post_likes")
     .select("*", { count: "exact", head: true })   // 只取总数，不取数据
     .eq("post_id", postId);
@@ -237,11 +241,11 @@ async function toggleFav(postId) {
   const key = String(postId);
 
   if (App.state.favSet.has(key)) {
-    await supabase.from("favorites").delete().eq("post_id", postId).eq("user_id", me.id);
+    await db.from("favorites").delete().eq("post_id", postId).eq("user_id", me.id);
     App.state.favSet.delete(key);
     showToast("已取消收藏");
   } else {
-    await supabase.from("favorites").insert({ post_id: postId, user_id: me.id });
+    await db.from("favorites").insert({ post_id: postId, user_id: me.id });
     App.state.favSet.add(key);
     showToast("收藏成功");
   }
@@ -256,13 +260,13 @@ async function toggleCommentLike(commentId) {
   const key = String(commentId);
 
   if (App.state.commentLikedSet.has(key)) {
-    await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", me.id);
+    await db.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", me.id);
     App.state.commentLikedSet.delete(key);
   } else {
-    await supabase.from("comment_likes").insert({ comment_id: commentId, user_id: me.id });
+    await db.from("comment_likes").insert({ comment_id: commentId, user_id: me.id });
     App.state.commentLikedSet.add(key);
   }
-  const { count } = await supabase
+  const { count } = await db
     .from("comment_likes")
     .select("*", { count: "exact", head: true })
     .eq("comment_id", commentId);
@@ -275,7 +279,7 @@ async function toggleCommentLike(commentId) {
 /* ---------- 10. 全局状态 + 对外接口 ---------- */
 /* 所有页面通过 App.xxx 调用这里的函数 */
 const App = {
-  supabase,
+  db,
   state: { likedSet: new Set(), favSet: new Set(), commentLikedSet: new Set() },
   getUser, requireLogin, esc, timeAgo, avatarHtml, showToast, logout,
   initFx, fetchPostList, renderPostCard,
