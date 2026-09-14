@@ -47,7 +47,7 @@
 
     /* ---------- 1. 加载帖子本身（联表带出作者资料） ---------- */
     async function loadPost() {
-      const { data: post, error } = await App.supabase
+      const { data: post, error } = await App.db
         .from("posts")
         .select("id, content, created_at, user_id, profiles(username, bio)")
         .eq("id", postId)
@@ -61,17 +61,17 @@
       postUserId = post.user_id;
 
       // 查这篇帖子的点赞数："我"是否赞过
-      const { count: likeCount } = await App.supabase
+      const { count: likeCount } = await App.db
         .from("post_likes")
         .select("*", { count: "exact", head: true })
         .eq("post_id", postId);
       const me = await App.getUser();
       let liked = false, faved = false;
       if (me) {
-        const { data: myLike } = await App.supabase.from("post_likes")
+        const { data: myLike } = await App.db.from("post_likes")
           .select("post_id").eq("post_id", postId).eq("user_id", me.id).maybeSingle();
         liked = !!myLike;
-        const { data: myFav } = await App.supabase.from("favorites")
+        const { data: myFav } = await App.db.from("favorites")
           .select("post_id").eq("post_id", postId).eq("user_id", me.id).maybeSingle();
         faved = !!myFav;
       }
@@ -101,7 +101,7 @@
 
     /* ---------- 2. 加载评论列表（联表带出评论者信息） ---------- */
     async function loadComments() {
-      const { data: comments, error } = await App.supabase
+      const { data: comments, error } = await App.db
         .from("comments")
         .select("id, content, created_at, user_id, profiles(username)")
         .eq("post_id", postId)
@@ -115,14 +115,14 @@
 
       // 统计每条评论的点赞数，以及"我"赞过哪些
       const ids = comments.map((c) => c.id);
-      const { data: likes } = await App.supabase.from("comment_likes").select("comment_id").in("comment_id", ids);
+      const { data: likes } = await App.db.from("comment_likes").select("comment_id").in("comment_id", ids);
       const likeCount = {};
       (likes || []).forEach((r) => (likeCount[r.comment_id] = (likeCount[r.comment_id] || 0) + 1));
 
       const me = await App.getUser();
       const likedSet = new Set();
       if (me) {
-        const { data: mine } = await App.supabase.from("comment_likes")
+        const { data: mine } = await App.db.from("comment_likes")
           .select("comment_id").eq("user_id", me.id).in("comment_id", ids);
         (mine || []).forEach((r) => likedSet.add(String(r.comment_id)));
       }
@@ -154,7 +154,7 @@
         const me = await App.requireLogin();   // 未登录先跳登录页
         if (!me) return;
 
-        const { error } = await App.supabase
+        const { error } = await App.db
           .from("comments")
           .insert({ post_id: postId, user_id: me.id, content });
 
