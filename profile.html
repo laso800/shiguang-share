@@ -62,7 +62,7 @@
 
       /* ---------- 1. 加载这个人 profile 表中的资料 ----------
          profiles 表在注册时由触发器自动创建一行，所以一定有数据 */
-      const { data: profile, error } = await App.supabase
+      const { data: profile, error } = await App.db
         .from("profiles")
         .select("id, username, bio, created_at")
         .eq("id", profileId)
@@ -75,7 +75,7 @@
       }
 
       /* ---------- 2. 统计他的帖子数 ---------- */
-      const { count: postCount } = await App.supabase
+      const { count: postCount } = await App.db
         .from("posts")
         .select("*", { count: "exact", head: true })
         .eq("user_id", profileId);
@@ -100,7 +100,7 @@
           document.getElementById("editBio").value = profile.bio || "";
         };
         document.getElementById("saveProfileBtn").onclick = async () => {
-          const { error } = await App.supabase
+          const { error } = await App.db
             .from("profiles")
             .update({
               username: document.getElementById("editUsername").value.trim() || profile.username,
