@@ -195,3 +195,32 @@ create policy "登录可上传图片" on storage.objects
 -- ==================== 完成！====================
 -- 验证方法：左侧菜单 Table Editor 里应能看到 7 张表；
 -- Storage 里能看到 images 桶。
+
+-- ==================== 六、二期：帖子统计视图 ====================
+-- 把"帖子 + 作者昵称 + 点赞数 + 评论数"合成一张虚拟表 posts_with_stats，
+-- 前端只需 1 次请求就能拿到全部数据（替代原来 5 次串行请求，首页提速），
+-- 还支持直接按热度 / 点赞数排序。
+-- 热度公式：点赞数 × 2 + 评论数 × 3（想调整权重改这里的数字即可）。
+
+create or replace view public.posts_with_stats as
+select
+  p.id,
+  p.user_id,
+  p.content,
+  p.image_url,
+  p.created_at,
+  pr.username,
+  coalesce(l.like_count, 0)::bigint      as like_count,
+  coalesce(c.comment_count, 0)::bigint   as comment_count,
+  (coalesce(l.like_count, 0) * 2 + coalesce(c.comment_count, 0) * 3)::bigint as hot_score
+from public.posts p
+join public.profiles pr on pr.id = p.user_id
+left join (
+  select post_id, count(*) as like_count from public.post_likes group by post_id
+) l on l.post_id = p.id
+left join (
+  select post_id, count(*) as comment_count from public.comments group by post_id
+) c on c.post_id = p.id;
+
+-- 视图同样要授权给匿名访客和登录用户读取
+grant select on public.posts_with_stats to anon, authenticated;
