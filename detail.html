@@ -147,23 +147,36 @@
 
     /* ---------- 3. 发送评论 ---------- */
     document.getElementById("commentBtn").onclick = async () => {
-      const content = document.getElementById("commentInput").value.trim();
-      if (!content) { App.showToast("评论不能为空"); return; }
+      try {
+        const content = document.getElementById("commentInput").value.trim();
+        if (!content) { App.showToast("评论不能为空"); return; }
 
-      const me = await App.requireLogin();   // 未登录先跳登录页
-      if (!me) return;
+        const me = await App.requireLogin();   // 未登录先跳登录页
+        if (!me) return;
 
-      const { error } = await App.supabase
-        .from("comments")
-        .insert({ post_id: postId, user_id: me.id, content });
+        const { error } = await App.supabase
+          .from("comments")
+          .insert({ post_id: postId, user_id: me.id, content });
 
-      if (error) { App.showToast("评论失败：" + error.message); return; }
-      document.getElementById("commentInput").value = "";
-      loadComments();   // 重新加载评论列表
+        if (error) throw error;
+        document.getElementById("commentInput").value = "";
+        loadComments();   // 重新加载评论列表
+      } catch (err) {
+        console.error(err);
+        App.showToast("评论失败：" + (err.message || err));
+      }
     };
 
-    loadPost();
-    loadComments();
+    loadPost().catch((err) => {
+      console.error(err);
+      document.getElementById("postCard").innerHTML =
+        '<div class="card empty">加载失败：' + err.message + '<br>请检查网络后刷新重试</div>';
+    });
+    loadComments().catch((err) => {
+      console.error(err);
+      document.getElementById("commentList").innerHTML =
+        '<div class="empty">评论加载失败：' + err.message + '</div>';
+    });
   </script>
 </body>
 </html>
