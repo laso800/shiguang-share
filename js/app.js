@@ -134,7 +134,7 @@ function initFx() {
 async function fetchPostList({ userId = null, limit = 50 } = {}) {
   let q = db
     .from("posts")
-    .select("id, content, created_at, user_id, profiles(username)");
+    .select("id, content, created_at, user_id, profiles!posts_user_id_fkey(username)");
   if (userId) q = q.eq("user_id", userId);         // 只看某人的帖子（个人主页用）
   q = q.order("created_at", { ascending: false }).limit(limit);
 
