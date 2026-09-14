@@ -119,7 +119,11 @@
       document.getElementById("emptyTip").style.display = posts.length ? "none" : "";
     }
 
-    init();
+    init().catch((err) => {
+      console.error(err);
+      document.getElementById("profileCard").innerHTML =
+        '<div class="card empty">加载失败：' + err.message + '<br>请检查网络后刷新重试</div>';
+    });
   </script>
 </body>
 </html>
