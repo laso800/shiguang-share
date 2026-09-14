@@ -362,7 +362,21 @@ textarea { resize: vertical; min-height: 120px; }
   margin-left: auto;
 }
 
-/* 发布页：选图按钮与预览 */
-.img-picker { display: flex; gap: 8px; }
+/* 发布页：拖放选图区与预览 */
+.img-drop {
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.img-drop p { margin-bottom: 10px; font-size: 13px; }
+.img-drop.dragging {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
 .img-preview-wrap { margin-top: 12px; }
 .img-preview-wrap .post-img { margin-top: 0; }
+.img-preview-wrap .btn { margin-top: 10px; }
