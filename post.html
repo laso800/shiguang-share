@@ -27,16 +27,18 @@
           <span id="charCount">0</span> / 500
         </div>
       </div>
-      <!-- 图片上传（二期）：选图 → 浏览器本地压缩 → 上传 Supabase 图片桶 -->
+      <!-- 图片上传（二期）：选图/拖图 → 浏览器本地压缩 → 上传 Supabase 图片桶 -->
       <div class="field">
         <label>图片（选一张，发布前自动压缩）</label>
         <input type="file" id="photoInput" accept="image/*" style="display:none">
-        <div class="img-picker">
+        <!-- 拖放区：点这里选图，或把图片文件直接拖进来 -->
+        <div class="img-drop" id="dropZone">
+          <p>点这里选择图片，或把图片文件直接拖进来</p>
           <button type="button" class="btn btn-ghost" id="pickPhotoBtn">选择图片</button>
-          <button type="button" class="btn btn-ghost" id="removePhotoBtn" style="display:none">移除图片</button>
         </div>
         <div class="img-preview-wrap" id="imgPreviewWrap" style="display:none">
           <img class="post-img" id="imgPreview" alt="图片预览">
+          <button type="button" class="btn btn-ghost" id="removePhotoBtn">移除图片</button>
         </div>
         <p class="muted" style="margin-top:8px">图片会先压缩到长边 1280 像素再上传，省流量、省免费空间（1GB）</p>
       </div>
@@ -57,25 +59,42 @@
       document.getElementById("charCount").textContent = e.target.value.length;
     });
 
-    /* ---------- 图片选择与预览 ---------- */
+    /* ---------- 图片选择（点击 / 拖拽两种方式）与预览 ---------- */
     let chosenImage = null;    // 选中的原始图片文件
     let previewUrl = null;     // 预览用的临时地址
-    document.getElementById("pickPhotoBtn").onclick = () => document.getElementById("photoInput").click();
-    document.getElementById("photoInput").addEventListener("change", (e) => {
-      const file = e.target.files[0];
+
+    /* 把选中的图片文件应用到预览 */
+    function applyImage(file) {
       if (!file) return;
+      if (!file.type.startsWith("image/")) { App.showToast("只支持图片文件哦"); return; }
       chosenImage = file;
       if (previewUrl) URL.revokeObjectURL(previewUrl);   // 释放上一次的预览地址
       previewUrl = URL.createObjectURL(file);            // 生成本地临时预览地址
       document.getElementById("imgPreview").src = previewUrl;
       document.getElementById("imgPreviewWrap").style.display = "";
-      document.getElementById("removePhotoBtn").style.display = "";
+    }
+
+    document.getElementById("pickPhotoBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      document.getElementById("photoInput").click();
     });
+    document.getElementById("photoInput").addEventListener("change", (e) => applyImage(e.target.files[0]));
+
+    /* 拖拽上传：dragover 必须 preventDefault，浏览器才允许触发 drop */
+    const dropZone = document.getElementById("dropZone");
+    dropZone.addEventListener("click", () => document.getElementById("photoInput").click());
+    ["dragenter", "dragover"].forEach((ev) =>
+      dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add("dragging"); })
+    );
+    ["dragleave", "drop"].forEach((ev) =>
+      dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove("dragging"); })
+    );
+    dropZone.addEventListener("drop", (e) => applyImage(e.dataTransfer.files && e.dataTransfer.files[0]));
+
     document.getElementById("removePhotoBtn").onclick = () => {
       chosenImage = null;
       document.getElementById("photoInput").value = "";
       document.getElementById("imgPreviewWrap").style.display = "none";
-      document.getElementById("removePhotoBtn").style.display = "none";
     };
 
     /* ---------- 发布：有图先传图，再插帖子 ---------- */
