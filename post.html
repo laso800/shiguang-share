@@ -54,7 +54,7 @@
 
         const me = await App.getUser();
         // F12 网络面板里能看到这条 insert 请求 —— 录视频时可以展示
-        const { error } = await App.supabase
+        const { error } = await App.db
           .from("posts")
           .insert({ user_id: me.id, content });
 
