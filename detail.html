@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>帖子详情 · 拾光</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+</head>
+<body>
+  <!-- ============ 顶部导航栏 ============ -->
+  <nav class="navbar">
+    <a class="logo" href="index.html">拾光</a>
+    <div class="nav-right">
+      <a class="btn btn-ghost" href="index.html">← 回首页</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <!-- 帖子内容放在这里 -->
+    <div id="postCard"></div>
+
+    <!-- 评论区 -->
+    <div class="card">
+      <div class="post-title" style="margin-bottom:6px">评论</div>
+      <div id="commentList"></div>
+
+      <!-- 发评论输入行 -->
+      <div class="comment-input-row">
+        <input type="text" id="commentInput" maxlength="200" placeholder="友善评论，温暖交流～">
+        <button class="btn btn-primary" id="commentBtn">发送</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+
+  <script>
+    App.initFx();
+
+    /* 从网址读取帖子 id，例如 detail.html?id=12 */
+    const postId = new URLSearchParams(location.search).get("id");
+    if (!postId) location.href = "index.html";
+
+    let postUserId = null;
+
+    /* ---------- 1. 加载帖子本身（联表带出作者资料） ---------- */
+    async function loadPost() {
+      const { data: post, error } = await App.supabase
+        .from("posts")
+        .select("id, content, created_at, user_id, profiles(username, bio)")
+        .eq("id", postId)
+        .single();
+
+      if (error || !post) {
+        document.getElementById("postCard").innerHTML =
+          '<div class="card empty">帖子不存在或已被删除</div>';
+        return;
+      }
+      postUserId = post.user_id;
+
+      // 查这篇帖子的点赞数："我"是否赞过
+      const { count: likeCount } = await App.supabase
+        .from("post_likes")
+        .select("*", { count: "exact", head: true })
+        .eq("post_id", postId);
+      const me = await App.getUser();
+      let liked = false, faved = false;
+      if (me) {
+        const { data: myLike } = await App.supabase.from("post_likes")
+          .select("post_id").eq("post_id", postId).eq("user_id", me.id).maybeSingle();
+        liked = !!myLike;
+        const { data: myFav } = await App.supabase.from("favorites")
+          .select("post_id").eq("post_id", postId).eq("user_id", me.id).maybeSingle();
+        faved = !!myFav;
+      }
+      App.state.likedSet = new Set(liked ? [String(postId)] : []);
+      App.state.favSet = new Set(faved ? [String(postId)] : []);
+
+      // 发布者头像是"个人简介入口"：点击直接跳到对方个人主页
+      document.getElementById("postCard").innerHTML = `
+        <div class="card">
+          <div class="post-head">
+            <a href="profile.html?user=${post.user_id}">${App.avatarHtml(post.profiles?.username)}</a>
+            <div>
+              <a class="post-user" href="profile.html?user=${post.user_id}">${App.esc(post.profiles?.username || "未知用户")}</a>
+              <div class="post-time">${App.timeAgo(post.created_at)}</div>
+            </div>
+          </div>
+          <div class="post-content">${App.esc(post.content)}</div>
+          <div class="post-actions">
+            <button class="action-btn ${liked ? "active" : ""}" id="likeBtn-${post.id}"
+                    onclick="App.toggleLike(${post.id})">点赞 <span id="likeCount-${post.id}">${likeCount}</span></button>
+            <button class="action-btn ${faved ? "active" : ""}" id="favBtn-${post.id}"
+                    onclick="App.toggleFav(${post.id})">收藏</button>
+            <a class="action-btn" href="profile.html?user=${post.user_id}">查看 TA 的主页 →</a>
+          </div>
+        </div>`;
+    }
+
+    /* ---------- 2. 加载评论列表（联表带出评论者信息） ---------- */
+    async function loadComments() {
+      const { data: comments, error } = await App.supabase
+        .from("comments")
+        .select("id, content, created_at, user_id, profiles(username)")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true });   // 旧评论在上，新评论在下
+
+      const list = document.getElementById("commentList");
+      if (error || !comments || comments.length === 0) {
+        list.innerHTML = '<div class="empty" style="padding:16px 0">还没有评论，来抢沙发～</div>';
+        return;
+      }
+
+      // 统计每条评论的点赞数，以及"我"赞过哪些
+      const ids = comments.map((c) => c.id);
+      const { data: likes } = await App.supabase.from("comment_likes").select("comment_id").in("comment_id", ids);
+      const likeCount = {};
+      (likes || []).forEach((r) => (likeCount[r.comment_id] = (likeCount[r.comment_id] || 0) + 1));
+
+      const me = await App.getUser();
+      const likedSet = new Set();
+      if (me) {
+        const { data: mine } = await App.supabase.from("comment_likes")
+          .select("comment_id").eq("user_id", me.id).in("comment_id", ids);
+        (mine || []).forEach((r) => likedSet.add(String(r.comment_id)));
+      }
+      App.state.commentLikedSet = likedSet;
+
+      // 评论者 ID（用户名）可以点击，跳到对方主页
+      list.innerHTML = comments.map((c) => `
+        <div class="comment-item">
+          <a href="profile.html?user=${c.user_id}">${App.avatarHtml(c.profiles?.username)}</a>
+          <div class="comment-body">
+            <a class="comment-user" href="profile.html?user=${c.user_id}">${App.esc(c.profiles?.username || "未知用户")}</a>
+            <span class="muted">· ${App.timeAgo(c.created_at)}</span>
+            <div class="comment-content">${App.esc(c.content)}</div>
+            <div class="comment-foot">
+              <button class="action-btn ${likedSet.has(String(c.id)) ? "active" : ""}" id="clikeBtn-${c.id}"
+                      onclick="App.toggleCommentLike(${c.id})">赞 <span id="clikeCount-${c.id}">${likeCount[c.id] || 0}</span></button>
+              <!-- 二期：删除自己评论的按钮放这里 -->
+            </div>
+          </div>
+        </div>`).join("");
+    }
+
+    /* ---------- 3. 发送评论 ---------- */
+    document.getElementById("commentBtn").onclick = async () => {
+      const content = document.getElementById("commentInput").value.trim();
+      if (!content) { App.showToast("评论不能为空"); return; }
+
+      const me = await App.requireLogin();   // 未登录先跳登录页
+      if (!me) return;
+
+      const { error } = await App.supabase
+        .from("comments")
+        .insert({ post_id: postId, user_id: me.id, content });
+
+      if (error) { App.showToast("评论失败：" + error.message); return; }
+      document.getElementById("commentInput").value = "";
+      loadComments();   // 重新加载评论列表
+    };
+
+    loadPost();
+    loadComments();
+  </script>
+</body>
+</html>
