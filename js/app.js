@@ -126,52 +126,54 @@ function initFx() {
   })();
 }
 
-/* ---------- 5. 帖子列表：查询 + 点赞/评论数统计 ----------
-   首页和个人主页都用这个函数。
-   第 1 步查帖子（顺便用外键联表查出作者用户名）
-   第 2 步统计每篇帖子的点赞数、评论数
-   第 3 步查出"我"点过赞 / 收藏过哪些（用于按钮高亮） */
-async function fetchPostList({ userId = null, limit = 50 } = {}) {
-  let q = db
-    .from("posts")
-    .select("id, content, created_at, user_id, profiles!posts_user_id_fkey(username)");
-  if (userId) q = q.eq("user_id", userId);         // 只看某人的帖子（个人主页用）
-  q = q.order("created_at", { ascending: false }).limit(limit);
+/* ---------- 5. 帖子列表查询（二期：改用数据库视图，一次请求拿全部） ----------
+   posts_with_stats 是一张"虚拟表"（视图），数据库已把帖子、作者昵称、
+   点赞数、评论数、热度分都算好放进去，前端不再需要发 5 个请求。
+   参数：
+     userId   - 只看某人的帖子（个人主页用）
+     sort     - new 最新 / hot 热度 / likes 点赞最多
+     keyword  - 按正文关键词模糊搜索
+     limit / offset - 分页（配合"加载更多"按钮） */
+async function fetchPostList({ userId = null, sort = "new", keyword = "", limit = 20, offset = 0 } = {}) {
+  let q = db.from("posts_with_stats").select("*");
+  if (userId) q = q.eq("user_id", userId);
+  if (keyword) q = q.ilike("content", "%" + keyword + "%");   // 模糊匹配正文
 
-  const { data: posts, error } = await q;
-  if (error || !posts || posts.length === 0) return [];
+  // 排序：主排序 + 时间第二排序，保证顺序稳定不抖动
+  if (sort === "hot") {
+    q = q.order("hot_score", { ascending: false }).order("created_at", { ascending: false });
+  } else if (sort === "likes") {
+    q = q.order("like_count", { ascending: false }).order("created_at", { ascending: false });
+  } else {
+    q = q.order("created_at", { ascending: false });
+  }
 
+  q = q.range(offset, offset + limit - 1);   // 分页：只取本页范围的记录
+
+  const { data, error } = await q;
+  if (error || !data) return [];   // 注意：视图没建好时这里会失败，返回空
+
+  const posts = data;
   const ids = posts.map((p) => p.id);
 
-  // 统计点赞数：一次查回所有相关行，在 JS 里数
-  const { data: likes } = await db.from("post_likes").select("post_id").in("post_id", ids);
-  const likeCount = {};
-  (likes || []).forEach((r) => (likeCount[r.post_id] = (likeCount[r.post_id] || 0) + 1));
-
-  // 统计评论数
-  const { data: comments } = await db.from("comments").select("post_id").in("post_id", ids);
-  const commentCount = {};
-  (comments || []).forEach((r) => (commentCount[r.post_id] = (commentCount[r.post_id] || 0) + 1));
-
-  // "我"的状态：赞过哪些、收藏过哪些
+  // "我"的状态：赞过哪些、收藏过哪些（只查当前这批帖子，用于按钮高亮）
   const me = await getUser();
   const likedSet = new Set();
   const favSet = new Set();
-  if (me) {
+  if (me && ids.length) {
     const { data: myLikes } = await db.from("post_likes").select("post_id").eq("user_id", me.id).in("post_id", ids);
     (myLikes || []).forEach((r) => likedSet.add(String(r.post_id)));
     const { data: myFavs } = await db.from("favorites").select("post_id").eq("user_id", me.id).in("post_id", ids);
     (myFavs || []).forEach((r) => favSet.add(String(r.post_id)));
   }
 
-  // 把集合存起来，点赞/收藏按钮切换时要用
   App.state.likedSet = likedSet;
   App.state.favSet = favSet;
 
   return posts.map((p) => ({
     ...p,
-    likeCount: likeCount[p.id] || 0,
-    commentCount: commentCount[p.id] || 0,
+    likeCount: p.like_count,
+    commentCount: p.comment_count,
   }));
 }
 
@@ -179,16 +181,21 @@ async function fetchPostList({ userId = null, limit = 50 } = {}) {
 function renderPostCard(p) {
   const liked = App.state.likedSet.has(String(p.id));
   const faved = App.state.favSet.has(String(p.id));
+  // 有图片才渲染（loading="lazy" 懒加载：滚动到附近才下载，页面更快）
+  const imgHtml = p.image_url
+    ? `<img class="post-img" src="${esc(p.image_url)}" alt="帖子图片" loading="lazy">`
+    : "";
   return `
   <div class="card post-card" onclick="location.href='detail.html?id=${p.id}'">
     <div class="post-head">
-      ${avatarHtml(p.profiles?.username)}
+      ${avatarHtml(p.username)}
       <div>
-        <div class="post-user">${esc(p.profiles?.username || "未知用户")}</div>
+        <div class="post-user">${esc(p.username || "未知用户")}</div>
         <div class="post-time">${timeAgo(p.created_at)}</div>
       </div>
     </div>
     <div class="post-content">${esc(p.content)}</div>
+    ${imgHtml}
     <div class="post-actions">
       <button class="action-btn ${liked ? "active" : ""}" id="likeBtn-${p.id}"
               onclick="event.stopPropagation(); App.toggleLike(${p.id})">
