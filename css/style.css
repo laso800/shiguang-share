@@ -315,3 +315,49 @@ textarea { resize: vertical; min-height: 120px; }
   pointer-events: none;
 }
 #toast.show { opacity: 0.92; }
+
+/* ============================================================
+   二期：瀑布流布局 / 帖子图片 / 视图切换
+   ============================================================ */
+
+/* 瀑布流用 CSS 多列布局实现：浏览器自动把卡片排成 N 列，
+   卡片高度可以不齐（break-inside: avoid 防止卡片被列截断） */
+#postList.masonry {
+  columns: 2;
+  column-gap: 16px;
+}
+#postList.masonry .post-card {
+  break-inside: avoid;
+  display: inline-block;
+  width: 100%;
+}
+@media (max-width: 560px) {
+  #postList.masonry { columns: 1; }   /* 手机屏幕窄，一列更舒服 */
+}
+
+/* 帖子图片：圆角、铺满卡片宽度、懒加载 */
+.post-img {
+  width: 100%;
+  border-radius: 12px;
+  margin-top: 12px;
+  display: block;
+  background: var(--surface-muted);
+  object-fit: cover;
+}
+
+/* "加载更多"按钮 */
+#loadMore {
+  margin-bottom: 16px;
+  color: var(--muted);
+}
+#loadMore:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* 瀑布流/列表切换按钮组：靠筛选栏最右 */
+.view-switch {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+}
