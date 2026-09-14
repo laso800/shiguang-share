@@ -53,7 +53,10 @@
   <div id="toast"></div>
 
   <script>
-    App.initFx();   // 背景气泡 + 鼠标光斑
+    /* 提示函数：App 加载失败时退化为浏览器弹窗，保证一定看得到 */
+    function tip(msg) {
+      if (window.App) { App.showToast(msg); } else { alert(msg); }
+    }
 
     /* 切换"登录 / 注册"标签 */
     function switchTab(which) {
@@ -64,34 +67,48 @@
       document.getElementById("tabReg").classList.toggle("active", !isLogin);
     }
 
-    /* 登录：用邮箱 + 密码换取登录会话 */
+    /* 登录：用邮箱 + 密码换取登录会话
+       try/catch 兜底：无论什么错（网络不通/被拦截/密钥错误）都会弹出原因 */
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();   // 阻止表单默认刷新页面
-      const { error } = await App.supabase.auth.signInWithPassword({
-        email: document.getElementById("loginEmail").value.trim(),
-        password: document.getElementById("loginPwd").value,
-      });
-      if (error) { App.showToast("登录失败：" + error.message); return; }
-      App.showToast("欢迎回来！");
-      setTimeout(() => (location.href = "index.html"), 600);
+      try {
+        const { error } = await App.supabase.auth.signInWithPassword({
+          email: document.getElementById("loginEmail").value.trim(),
+          password: document.getElementById("loginPwd").value,
+        });
+        if (error) throw error;
+        tip("欢迎回来！");
+        setTimeout(() => (location.href = "index.html"), 600);
+      } catch (err) {
+        console.error(err);   // F12 控制台能看到原始错误对象
+        tip("登录失败：" + (err.message || err));
+      }
     });
 
     /* 注册：创建新账号，成功后自动登录并跳回首页 */
     document.getElementById("regForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const { data, error } = await App.supabase.auth.signUp({
-        email: document.getElementById("regEmail").value.trim(),
-        password: document.getElementById("regPwd").value,
-      });
-      if (error) { App.showToast("注册失败：" + error.message); return; }
-      // 如果管理员在 Supabase 里关掉了"邮箱确认"，data.session 会直接存在
-      if (data.session) {
-        App.showToast("注册成功，欢迎加入拾光！");
-        setTimeout(() => (location.href = "index.html"), 600);
-      } else {
-        App.showToast("注册成功！请先去邮箱点击确认链接");
+      try {
+        const { data, error } = await App.supabase.auth.signUp({
+          email: document.getElementById("regEmail").value.trim(),
+          password: document.getElementById("regPwd").value,
+        });
+        if (error) throw error;
+        // 如果管理员在 Supabase 里关掉了"邮箱确认"，data.session 会直接存在
+        if (data.session) {
+          tip("注册成功，欢迎加入拾光！");
+          setTimeout(() => (location.href = "index.html"), 600);
+        } else {
+          tip("注册成功！请先去邮箱点击确认链接");
+        }
+      } catch (err) {
+        console.error(err);
+        tip("注册失败：" + (err.message || err));
       }
     });
+
+    /* 最后才启动背景特效：特效失败也不能影响登录/注册按钮 */
+    try { App.initFx(); } catch (err) { console.error(err); }
   </script>
 </body>
 </html>
