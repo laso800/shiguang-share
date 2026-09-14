@@ -81,7 +81,12 @@
     }
 
     setupNav();
-    loadPosts();
+    loadPosts().catch((err) => {
+      console.error(err);
+      const tip = document.getElementById("emptyTip");
+      tip.style.display = "";
+      tip.innerHTML = "加载失败：" + err.message + "<br>请检查网络后刷新重试";
+    });
   </script>
 </body>
 </html>
