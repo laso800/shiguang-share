@@ -72,7 +72,7 @@
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();   // 阻止表单默认刷新页面
       try {
-        const { error } = await App.supabase.auth.signInWithPassword({
+        const { error } = await App.db.auth.signInWithPassword({
           email: document.getElementById("loginEmail").value.trim(),
           password: document.getElementById("loginPwd").value,
         });
@@ -89,7 +89,7 @@
     document.getElementById("regForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       try {
-        const { data, error } = await App.supabase.auth.signUp({
+        const { data, error } = await App.db.auth.signUp({
           email: document.getElementById("regEmail").value.trim(),
           password: document.getElementById("regPwd").value,
         });
