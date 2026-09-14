@@ -23,21 +23,32 @@
   <main class="container">
     <h1 class="page-title">今日拾光</h1>
 
-    <!-- ============ 内容筛选栏 ============
-         一期只实现"最新"；"热度 / 点赞 / 关键词搜索"属于二期功能，
-         先把界面摆出来，点击会提示"二期上线" -->
+    <!-- ============ 内容筛选栏（二期全部生效） ============
+         "最新 / 热度 / 点赞最多"三种排序，
+         输入框输入关键词回车或点"搜索"，清除搜索点"×" -->
     <div class="filter-bar">
-      <button class="chip active" id="sortNew">最新</button>
-      <button class="chip" id="sortHot">热度</button>
-      <button class="chip" id="sortLikes">点赞最多</button>
-      <input type="text" class="search-input" id="searchBox"
-             placeholder="搜索关键词 / #话题（二期上线）" disabled>
+      <button class="chip active" id="sortNew" onclick="setSort('new')">最新</button>
+      <button class="chip" id="sortHot" onclick="setSort('hot')">热度</button>
+      <button class="chip" id="sortLikes" onclick="setSort('likes')">点赞最多</button>
+      <input type="text" class="search-input" id="searchBox" placeholder="搜索正文关键词，回车确认">
+      <button class="chip" onclick="doSearch()">搜索</button>
+      <button class="chip" id="searchClear" style="display:none" onclick="clearSearch()">清除</button>
+
+      <!-- 视图切换：瀑布流 / 图文列表（记住用户的选择） -->
+      <span class="view-switch">
+        <button class="chip active" id="viewMasonry" onclick="setView('masonry')">瀑布流</button>
+        <button class="chip" id="viewList" onclick="setView('list')">列表</button>
+      </span>
     </div>
 
-    <!-- 帖子列表由 JS 填充。二期时这里会变成瀑布流 -->
+    <!-- 帖子由 JS 填充 -->
     <div id="postList"></div>
+
+    <!-- 加载更多按钮：帖子多于一页时出现 -->
+    <button class="btn btn-ghost" id="loadMore" style="display:none;width:100%">加载更多</button>
+
     <div class="empty" id="emptyTip" style="display:none">
-      还没有动态，登录后发布第一条吧<br><br>
+      没有找到相关动态<br><br>
       <a class="btn btn-primary" href="post.html">发布动态</a>
     </div>
   </main>
@@ -47,7 +58,21 @@
   <script>
     App.initFx();
 
+    /* ---------- 状态：排序方式 / 搜索词 / 当前页码 ---------- */
+    let sort = "new";
+    let keyword = "";
+    let page = 0;
+    const PAGE_SIZE = 10;   // 每页 10 条
+
     /* ---------- 1. 根据登录状态调整导航栏按钮 ---------- */
+    function showErr(err) {
+      console.error(err);
+      const tip = document.getElementById("emptyTip");
+      tip.style.display = "";
+      tip.innerHTML = "加载失败：" + err.message +
+        "<br>若提示找不到 posts_with_stats，请先在 Supabase 运行二期 SQL（视图）。";
+    }
+
     async function setupNav() {
       const me = await App.getUser();
       document.getElementById("loginLink").style.display = me ? "none" : "";
@@ -56,37 +81,67 @@
     }
     document.getElementById("logoutBtn").onclick = App.logout;
 
-    /* ---------- 2. 加载帖子列表（默认按时间从新到旧） ---------- */
-    async function loadPosts() {
-      const posts = await App.fetchPostList();   // 公共函数：查帖子 + 统计
-      const list = document.getElementById("postList");
-      list.innerHTML = posts.map(App.renderPostCard).join("");
-      document.getElementById("emptyTip").style.display = posts.length ? "none" : "";
+    /* ---------- 2. 加载帖子（reset=true 时从头加载新的一页） ---------- */
+    async function loadPosts(reset) {
+      if (reset) {
+        page = 0;
+        document.getElementById("postList").innerHTML = "";
+        document.getElementById("emptyTip").style.display = "none";
+      }
+      const posts = await App.fetchPostList({
+        sort, keyword,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      });
+
+      // 第一页就是空 → 显示空提示
+      document.getElementById("emptyTip").style.display = (reset && posts.length === 0) ? "" : "none";
+
+      // 追加渲染（insertAdjacentHTML 不会覆盖已加载的内容 = 实现"加载更多"）
+      document.getElementById("postList").insertAdjacentHTML(
+        "beforeend", posts.map(App.renderPostCard).join("")
+      );
+
+      page++;
+      // 本页拿到的条数不足一页，说明后面没有了 → 隐藏"加载更多"
+      document.getElementById("loadMore").style.display = posts.length < PAGE_SIZE ? "none" : "";
+    }
+    document.getElementById("loadMore").onclick = () => loadPosts(false).catch(showErr);
+
+    /* ---------- 3. 排序切换 ---------- */
+    function setSort(s) {
+      sort = s;
+      document.getElementById("sortNew").classList.toggle("active", s === "new");
+      document.getElementById("sortHot").classList.toggle("active", s === "hot");
+      document.getElementById("sortLikes").classList.toggle("active", s === "likes");
+      loadPosts(true).catch(showErr);
     }
 
-    /* ---------- 3. 筛选按钮（一期只做"最新"，其余提示二期） ---------- */
-    document.getElementById("sortNew").onclick = () => {
-      setActiveChip("sortNew");
-      loadPosts();   // 默认就是按时间排序
-    };
-    ["sortHot", "sortLikes"].forEach((id) => {
-      document.getElementById(id).onclick = () => {
-        setActiveChip(id);
-        App.showToast("该排序属于二期功能，先给你留好位置啦");
-      };
-    });
-    function setActiveChip(id) {
-      document.querySelectorAll(".filter-bar .chip").forEach((c) => c.classList.remove("active"));
-      document.getElementById(id).classList.add("active");
+    /* ---------- 4. 关键词搜索 / 清除 ---------- */
+    function doSearch() {
+      keyword = document.getElementById("searchBox").value.trim();
+      document.getElementById("searchClear").style.display = keyword ? "" : "none";
+      loadPosts(true).catch(showErr);
     }
+    function clearSearch() {
+      document.getElementById("searchBox").value = "";
+      doSearch();
+    }
+    document.getElementById("searchBox").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doSearch();   // 回车即搜索
+    });
+
+    /* ---------- 5. 瀑布流 / 列表切换（存到 localStorage 记住选择） ---------- */
+    function setView(mode) {
+      document.getElementById("postList").classList.toggle("masonry", mode === "masonry");
+      document.getElementById("viewMasonry").classList.toggle("active", mode === "masonry");
+      document.getElementById("viewList").classList.toggle("active", mode === "list");
+      localStorage.setItem("viewMode", mode);
+    }
+    setView(localStorage.getItem("viewMode") === "list" ? "list" : "masonry");
 
     setupNav();
-    loadPosts().catch((err) => {
-      console.error(err);
-      const tip = document.getElementById("emptyTip");
-      tip.style.display = "";
-      tip.innerHTML = "加载失败：" + err.message + "<br>请检查网络后刷新重试";
-    });
+    loadPosts(true).catch(showErr);
   </script>
 </body>
 </html>
