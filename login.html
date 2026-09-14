@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 / 注册 · 拾光</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- 顺序很重要：先 Supabase 官方库，再我们的公共脚本 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+</head>
+<body>
+  <!-- 登录 / 注册共用一张卡片，靠切换标签区分 -->
+  <div class="form-card card">
+    <h1 class="page-title">拾光</h1>
+    <p class="muted" style="text-align:center;margin-bottom:20px">记录日常，分享温暖</p>
+
+    <div class="tabs">
+      <button class="tab active" id="tabLogin" onclick="switchTab('login')">登录</button>
+      <button class="tab" id="tabReg" onclick="switchTab('reg')">注册</button>
+    </div>
+
+    <!-- 登录表单 -->
+    <form id="loginForm">
+      <div class="field">
+        <label>邮箱</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" id="loginPwd" placeholder="至少 6 位" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">登 录</button>
+    </form>
+
+    <!-- 注册表单（默认隐藏） -->
+    <form id="regForm" style="display:none">
+      <div class="field">
+        <label>邮箱</label>
+        <input type="email" id="regEmail" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" id="regPwd" placeholder="至少 6 位" minlength="6" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">注 册</button>
+    </form>
+
+    <p class="form-hint"><a href="index.html">← 先随便逛逛（不登录也能看帖子）</a></p>
+  </div>
+
+  <!-- 提示条 -->
+  <div id="toast"></div>
+
+  <script>
+    App.initFx();   // 背景气泡 + 鼠标光斑
+
+    /* 切换"登录 / 注册"标签 */
+    function switchTab(which) {
+      const isLogin = which === "login";
+      document.getElementById("loginForm").style.display = isLogin ? "" : "none";
+      document.getElementById("regForm").style.display = isLogin ? "none" : "";
+      document.getElementById("tabLogin").classList.toggle("active", isLogin);
+      document.getElementById("tabReg").classList.toggle("active", !isLogin);
+    }
+
+    /* 登录：用邮箱 + 密码换取登录会话 */
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();   // 阻止表单默认刷新页面
+      const { error } = await App.supabase.auth.signInWithPassword({
+        email: document.getElementById("loginEmail").value.trim(),
+        password: document.getElementById("loginPwd").value,
+      });
+      if (error) { App.showToast("登录失败：" + error.message); return; }
+      App.showToast("欢迎回来！");
+      setTimeout(() => (location.href = "index.html"), 600);
+    });
+
+    /* 注册：创建新账号，成功后自动登录并跳回首页 */
+    document.getElementById("regForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const { data, error } = await App.supabase.auth.signUp({
+        email: document.getElementById("regEmail").value.trim(),
+        password: document.getElementById("regPwd").value,
+      });
+      if (error) { App.showToast("注册失败：" + error.message); return; }
+      // 如果管理员在 Supabase 里关掉了"邮箱确认"，data.session 会直接存在
+      if (data.session) {
+        App.showToast("注册成功，欢迎加入拾光！");
+        setTimeout(() => (location.href = "index.html"), 600);
+      } else {
+        App.showToast("注册成功！请先去邮箱点击确认链接");
+      }
+    });
+  </script>
+</body>
+</html>
