@@ -157,10 +157,12 @@ function initFx() {
      userId   - 只看某人的帖子（个人主页用）
      sort     - new 最新 / hot 热度 / likes 点赞最多
      keyword  - 按正文关键词模糊搜索
+     ids      - 只看指定的帖子（个人主页"我的收藏"用）
      limit / offset - 分页（配合"加载更多"按钮） */
-async function fetchPostList({ userId = null, sort = "new", keyword = "", limit = 20, offset = 0 } = {}) {
+async function fetchPostList({ userId = null, sort = "new", keyword = "", ids = null, limit = 20, offset = 0 } = {}) {
   let q = db.from("posts_with_stats").select("*");
   if (userId) q = q.eq("user_id", userId);
+  if (ids) q = q.in("id", ids);                             // 收藏列表：只查收藏过的帖子
   if (keyword) q = q.ilike("content", "%" + keyword + "%");   // 模糊匹配正文
 
   // 排序：主排序 + 时间第二排序，保证顺序稳定不抖动
