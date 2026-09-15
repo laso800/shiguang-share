@@ -180,16 +180,16 @@ async function fetchPostList({ userId = null, sort = "new", keyword = "", ids = 
   if (error || !data) return [];   // 注意：视图没建好时这里会失败，返回空
 
   const posts = data;
-  const ids = posts.map((p) => p.id);
+  const postIds = posts.map((p) => p.id);
 
   // "我"的状态：赞过哪些、收藏过哪些（只查当前这批帖子，用于按钮高亮）
   const me = await getUser();
   const likedSet = new Set();
   const favSet = new Set();
-  if (me && ids.length) {
-    const { data: myLikes } = await db.from("post_likes").select("post_id").eq("user_id", me.id).in("post_id", ids);
+  if (me && postIds.length) {
+    const { data: myLikes } = await db.from("post_likes").select("post_id").eq("user_id", me.id).in("post_id", postIds);
     (myLikes || []).forEach((r) => likedSet.add(String(r.post_id)));
-    const { data: myFavs } = await db.from("favorites").select("post_id").eq("user_id", me.id).in("post_id", ids);
+    const { data: myFavs } = await db.from("favorites").select("post_id").eq("user_id", me.id).in("post_id", postIds);
     (myFavs || []).forEach((r) => favSet.add(String(r.post_id)));
   }
 
