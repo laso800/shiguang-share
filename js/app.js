@@ -195,6 +195,12 @@ async function fetchPostList({ userId = null, sort = "new", keyword = "", ids = 
 
   App.state.likedSet = likedSet;
   App.state.favSet = favSet;
+  App.state.me = me;   // 记住当前用户，卡片渲染时判断"是不是我的帖子"用
+
+  // 缓存：只缓存"最新、无搜索、无过滤、第一页"的列表，登录后打开首页秒显
+  if (!userId && !ids && !keyword && sort === "new" && offset === 0) {
+    savePostsCache(posts);
+  }
 
   return posts.map((p) => ({
     ...p,
@@ -207,12 +213,14 @@ async function fetchPostList({ userId = null, sort = "new", keyword = "", ids = 
 function renderPostCard(p) {
   const liked = App.state.likedSet.has(String(p.id));
   const faved = App.state.favSet.has(String(p.id));
+  // 只有自己的帖子才显示"删除"按钮
+  const isOwn = App.state.me && App.state.me.id === p.user_id;
   // 有图片才渲染（loading="lazy" 懒加载：滚动到附近才下载，页面更快）
   const imgHtml = p.image_url
     ? `<img class="post-img" src="${esc(p.image_url)}" alt="帖子图片" loading="lazy">`
     : "";
   return `
-  <div class="card post-card" onclick="location.href='detail.html?id=${p.id}'">
+  <div class="card post-card" id="postCard-${p.id}" onclick="location.href='detail.html?id=${p.id}'">
     <div class="post-head">
       ${avatarHtml(p.username)}
       <div>
@@ -232,6 +240,7 @@ function renderPostCard(p) {
         收藏
       </button>
       <span class="muted">评论 ${p.commentCount}</span>
+      ${isOwn ? `<button class="action-btn del" onclick="event.stopPropagation(); App.deletePost(${p.id})">删除</button>` : ""}
     </div>
   </div>`;
 }
@@ -241,30 +250,24 @@ async function toggleLike(postId) {
   const me = await getUser();
   if (!me) { location.href = "login.html"; return; }
   const key = String(postId);
+  const adding = !App.state.likedSet.has(key);
 
-  if (App.state.likedSet.has(key)) {
-    // 已赞过 → 删掉这条点赞记录（取消点赞）
-    await db.from("post_likes").delete().eq("post_id", postId).eq("user_id", me.id);
-    App.state.likedSet.delete(key);
-  } else {
+  if (adding) {
     // 没赞过 → 插入一条点赞记录
     await db.from("post_likes").insert({ post_id: postId, user_id: me.id });
     App.state.likedSet.add(key);
+  } else {
+    // 已赞过 → 删掉这条点赞记录（取消点赞）
+    await db.from("post_likes").delete().eq("post_id", postId).eq("user_id", me.id);
+    App.state.likedSet.delete(key);
   }
-  await refreshLikeUI(postId);
-}
 
-/* 重新查询点赞总数，并更新按钮样式（红色高亮 = 已赞） */
-async function refreshLikeUI(postId) {
+  // 提速关键：数字在本地直接 ±1，不再发第 2 个请求去重新统计
+  //（原来的写法要点赞、取消都会再等一次网络往返）
   const countEl = document.getElementById("likeCount-" + postId);
   const btnEl = document.getElementById("likeBtn-" + postId);
-  if (!countEl || !btnEl) return;
-  const { count } = await db
-    .from("post_likes")
-    .select("*", { count: "exact", head: true })   // 只取总数，不取数据
-    .eq("post_id", postId);
-  countEl.textContent = count ?? 0;
-  btnEl.classList.toggle("active", App.state.likedSet.has(String(postId)));
+  if (countEl) countEl.textContent = (parseInt(countEl.textContent) || 0) + (adding ? 1 : -1);
+  if (btnEl) btnEl.classList.toggle("active", App.state.likedSet.has(key));
 }
 
 /* ---------- 8. 收藏 / 取消收藏 ---------- */
@@ -291,31 +294,80 @@ async function toggleCommentLike(commentId) {
   const me = await getUser();
   if (!me) { location.href = "login.html"; return; }
   const key = String(commentId);
+  const adding = !App.state.commentLikedSet.has(key);
 
-  if (App.state.commentLikedSet.has(key)) {
-    await db.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", me.id);
-    App.state.commentLikedSet.delete(key);
-  } else {
+  if (adding) {
     await db.from("comment_likes").insert({ comment_id: commentId, user_id: me.id });
     App.state.commentLikedSet.add(key);
+  } else {
+    await db.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", me.id);
+    App.state.commentLikedSet.delete(key);
   }
-  const { count } = await db
-    .from("comment_likes")
-    .select("*", { count: "exact", head: true })
-    .eq("comment_id", commentId);
+
+  // 同帖子点赞：本地 ±1，省一次网络请求
   const countEl = document.getElementById("clikeCount-" + commentId);
   const btnEl = document.getElementById("clikeBtn-" + commentId);
-  if (countEl) countEl.textContent = count ?? 0;
+  if (countEl) countEl.textContent = (parseInt(countEl.textContent) || 0) + (adding ? 1 : -1);
   if (btnEl) btnEl.classList.toggle("active", App.state.commentLikedSet.has(key));
 }
 
-/* ---------- 10. 全局状态 + 对外接口 ---------- */
+/* ---------- 10. 删除帖子（只能删自己的，数据库 RLS 也会拦一道） ---------- */
+async function deletePost(postId) {
+  const me = await getUser();
+  if (!me) { location.href = "login.html"; return false; }
+  if (!confirm("确定删除这条动态吗？删除后不可恢复")) return false;
+
+  const { error } = await db
+    .from("posts")
+    .delete()
+    .eq("id", postId)
+    .eq("user_id", me.id);   // 双保险：后端策略同样只允许删自己的
+  if (error) { showToast("删除失败：" + error.message); return false; }
+
+  // 把页面上的这张卡片直接移除，不用重新加载整页
+  const card = document.getElementById("postCard-" + postId);
+  if (card) card.remove();
+  showToast("已删除");
+  return true;
+}
+
+/* ---------- 11. 首页缓存（提速） ----------
+   登录成功时预取一次帖子列表存进 localStorage，
+   下次打开首页先用缓存立刻渲染，再从服务器拿最新数据覆盖。
+   缓存只存"最新/无搜索/第一页"，有效期 10 分钟。 */
+const POSTS_CACHE_KEY = "shiguang_post_cache";
+
+function savePostsCache(posts) {
+  try {
+    localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify({ time: Date.now(), posts }));
+  } catch (e) { /* 存储满或隐私模式下失败就忽略 */ }
+}
+
+function getPostsCache(maxAge = 10 * 60 * 1000) {
+  try {
+    const raw = localStorage.getItem(POSTS_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw);
+    if (Date.now() - cache.time > maxAge) return null;   // 过期
+    return cache.posts;
+  } catch (e) { return null; }
+}
+
+/* 登录后调用：后台悄悄把首页数据预取进缓存 */
+async function prefetchPosts() {
+  try {
+    await fetchPostList();   // 默认参数会触发 savePostsCache
+  } catch (e) { console.error(e); }
+}
+
+/* ---------- 12. 全局状态 + 对外接口 ---------- */
 /* 所有页面通过 App.xxx 调用这里的函数 */
 const App = {
   db,
-  state: { likedSet: new Set(), favSet: new Set(), commentLikedSet: new Set() },
+  state: { me: null, likedSet: new Set(), favSet: new Set(), commentLikedSet: new Set() },
   getUser, requireLogin, esc, timeAgo, avatarHtml, showToast, logout, compressImage,
-  initFx, fetchPostList, renderPostCard,
+  initFx, fetchPostList, renderPostCard, deletePost,
   toggleLike, toggleFav, toggleCommentLike,
+  getPostsCache, prefetchPosts,
 };
 window.App = App;
