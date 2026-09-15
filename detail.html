@@ -77,10 +77,11 @@
       }
       App.state.likedSet = new Set(liked ? [String(postId)] : []);
       App.state.favSet = new Set(faved ? [String(postId)] : []);
+      const canDelete = me && me.id === post.user_id;   // 只能删自己的帖子
 
       // 发布者头像是"个人简介入口"：点击直接跳到对方个人主页
       document.getElementById("postCard").innerHTML = `
-        <div class="card">
+        <div class="card" id="postCard-${post.id}">
           <div class="post-head">
             <a href="profile.html?user=${post.user_id}">${App.avatarHtml(post.profiles?.username)}</a>
             <div>
@@ -96,6 +97,7 @@
             <button class="action-btn ${faved ? "active" : ""}" id="favBtn-${post.id}"
                     onclick="App.toggleFav(${post.id})">收藏</button>
             <a class="action-btn" href="profile.html?user=${post.user_id}">查看 TA 的主页 →</a>
+            ${canDelete ? `<button class="action-btn del" onclick="App.deletePost(${post.id}).then(ok => { if (ok) location.href = 'index.html'; })">删除</button>` : ""}
           </div>
         </div>`;
     }
