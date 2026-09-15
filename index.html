@@ -87,12 +87,26 @@
         page = 0;
         document.getElementById("postList").innerHTML = "";
         document.getElementById("emptyTip").style.display = "none";
+
+        // 提速：默认视图下先用本地缓存立刻渲染（秒开），
+        // 再等网络数据回来覆盖成最新内容
+        if (sort === "new" && !keyword) {
+          const cached = App.getPostsCache();
+          if (cached && cached.length) {
+            document.getElementById("postList").insertAdjacentHTML(
+              "beforeend", cached.map(App.renderPostCard).join("")
+            );
+          }
+        }
       }
       const posts = await App.fetchPostList({
         sort, keyword,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       });
+
+      // 网络数据回来了：清掉缓存渲染的旧内容，避免重复
+      if (reset) document.getElementById("postList").innerHTML = "";
 
       // 第一页就是空 → 显示空提示
       document.getElementById("emptyTip").style.display = (reset && posts.length === 0) ? "" : "none";
