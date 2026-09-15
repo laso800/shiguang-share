@@ -88,6 +88,7 @@
         });
         if (error) throw error;
         tip("欢迎回来！");
+        App.prefetchPosts();   // 后台预取首页数据进缓存，待会儿首页秒开
         setTimeout(() => (location.href = "index.html"), 600);
       } catch (err) {
         console.error(err);   // F12 控制台能看到原始错误对象
@@ -117,6 +118,7 @@
             await App.db.from("profiles").update({ username }).eq("id", data.user.id);
           } catch (updErr) { console.error(updErr); }
           tip("注册成功，欢迎加入拾光！");
+          App.prefetchPosts();   // 后台预取首页数据进缓存
           setTimeout(() => (location.href = "index.html"), 600);
         } else {
           tip("注册成功！请先去邮箱点击确认链接");
