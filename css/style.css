@@ -198,6 +198,10 @@ a { color: var(--primary); text-decoration: none; }
 .action-btn.active { color: var(--primary); font-weight: 600; }
 .action-btn:hover { color: var(--primary); }
 
+/* 删除按钮：低调的暗红色 */
+.action-btn.del { color: #C9483F; }
+.action-btn.del:hover { color: #C9483F; }
+
 /* ============================================================
    首页筛选栏（二期会扩展：热度 / 点赞 / 关键词搜索）
    ============================================================ */
